@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebScrub | Security Scanner</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <nav class="sidebar" id="sidebar">
+            <div class="logo">
+                <i class="fas fa-shield-alt"></i> WebScrub
+            </div>
+            <ul class="nav-links">
+                <li class="active" id="nav-dashboard"><a href="#" onclick="showSection('new-scan')"><i
+                            class="fas fa-tachometer-alt"></i> Dashboard</a></li>
+                <li id="nav-reports"><a href="#" onclick="showSection('reports')"><i class="fas fa-file-alt"></i>
+                        Reports</a></li>
+                <li id="nav-settings"><a href="#" onclick="showSection('settings')"><i class="fas fa-cog"></i>
+                        Settings</a></li>
+            </ul>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header>
+                <div class="mobile-toggle" onclick="toggleSidebar()">
+                    <i class="fas fa-bars"></i>
+                </div>
+                <div class="status-indicator">
+                    System Status: <span class="status-online">ONLINE <span class="dot"></span></span>
+                </div>
+            </header>
+
+            <!-- Dashboard / New Scan View -->
+            <div id="scan-view" class="content-section">
+                <div class="hero-card">
+                    <h1>Initialise Security Protocol</h1>
+                    <p>Enter target URL or IP address to begin vulnerability assessment.</p>
+
+                    <div class="input-group">
+                        <input type="text" id="target-url" placeholder="e.g., https://example.com" autocomplete="off">
+                        <button id="scan-btn" onclick="startScan()">
+                            INITIATE SCAN <i class="fas fa-bolt"></i>
+                        </button>
+                    </div>
+
+                    <div class="options-grid">
+                        <div class="option-card active">
+                            <i class="fas fa-heading"></i>
+                            <span>Header Analysis</span>
+                            <div class="toggle">ON</div>
+                        </div>
+                        <div class="option-card active">
+                            <i class="fas fa-lock"></i>
+                            <span>SSL/TLS Check</span>
+                            <div class="toggle">ON</div>
+                        </div>
+                        <div class="option-card active">
+                            <i class="fas fa-search"></i>
+                            <span>DNS Recon</span>
+                            <div class="toggle">ON</div>
+                        </div>
+                        <div class="option-card active">
+                            <i class="fas fa-bug"></i>
+                            <span>Vulnerability Probe</span>
+                            <div class="toggle">ON</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Terminal Output -->
+                <div class="terminal-window">
+                    <div class="term-header">
+                        <span class="term-dot red"></span>
+                        <span class="term-dot yellow"></span>
+                        <span class="term-dot green"></span>
+                        <span class="term-title">Live Sequence Log</span>
+                    </div>
+                    <div class="term-body" id="terminal-log">
+                        <p>> Aegis System Ready...</p>
+                        <p>> Waiting for target...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results View -->
+            <div id="results-view" class="content-section hidden">
+                <div class="results-header">
+                    <h2>Scan Report: <span id="res-target" class="accent-text"></span></h2>
+                    <div class="report-actions">
+                        <button class="btn-secondary" onclick="exportPDF()">
+                            <i class="fas fa-file-pdf"></i> Export PDF
+                        </button>
+                        <button class="btn-secondary" onclick="resetView()">
+                            <i class="fas fa-arrow-left"></i> Back
+                        </button>
+                    </div>
+                </div>
+                <div class="risk-badge-container">
+                    Risk Score: <span id="res-score">0.0</span>/10
+                </div>
+
+                <div class="results-grid">
+                    <div class="card val-list">
+                        <h3>Vulnerabilities Detected</h3>
+                        <ul id="vuln-list" class="vuln-items"></ul>
+                    </div>
+                    <div class="card details-panel">
+                        <h3>Analysis Details</h3>
+                        <div id="detail-content">
+                            <div class="detail-block">
+                                <h4>IP Address</h4>
+                                <p id="res-ip">N/A</p>
+                            </div>
+                            <div class="detail-block">
+                                <h4>Network Analysis</h4>
+                                <pre id="res-scapy" class="code-block">No Data</pre>
+                            </div>
+                            <div class="detail-block">
+                                <h4>Response Headers</h4>
+                                <pre id="res-nmap" class="code-block">No Data</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reports View -->
+            <div id="reports-view" class="content-section hidden">
+                <div class="card">
+                    <h3>Scan History</h3>
+                    <div id="history-list" class="history-container">
+                        <p class="empty-msg">No previous scan history found.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings View -->
+            <div id="settings-view" class="content-section hidden">
+                <div class="card">
+                    <h3>System Configuration</h3>
+                    <div class="detail-block">
+                        <p><strong>Version:</strong> 1.1.0 (Responsive Edition)</p>
+                        <p><strong>Core:</strong> Python 3.x / Flask</p>
+                        <p><strong>Engines:</strong> BeautifulSoup4, Requests, DNSPython</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+
+</html>
