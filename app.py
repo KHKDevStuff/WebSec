@@ -33,15 +33,15 @@ def scan():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+import io
+
 @app.route('/export_pdf', methods=['GET', 'POST'])
 def export_pdf():
     global last_scan_result
     
-    # If POST, data comes from the request body (e.g., from History)
     if request.method == 'POST':
         data = request.json
     else:
-        # If GET, use the last successful scan
         data = last_scan_result
 
     if not data:
@@ -66,10 +66,14 @@ def export_pdf():
         pdf.multi_cell(0, 5, txt=v.get('description', ''))
         pdf.ln(2)
 
-    filename = "webscrub_report.pdf"
-    full_path = os.path.join(os.getcwd(), filename)
-    pdf.output(full_path)
-    return send_file(full_path, as_attachment=True)
+    # Use 'dest=S' to get PDF as a string, then convert to bytes for io.BytesIO
+    pdf_output = pdf.output(dest='S').encode('latin-1')
+    return send_file(
+        io.BytesIO(pdf_output),
+        as_attachment=True,
+        download_name="webscrub_report.pdf",
+        mimetype='application/pdf'
+    )
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
