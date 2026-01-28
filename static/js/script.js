@@ -91,7 +91,41 @@ async function startScan() {
     }
 }
 
+let currentScanData = null;
+
+async function exportPDF(data = null) {
+    const scanToExport = data || currentScanData;
+    if (!scanToExport) {
+        logToTerminal("No report data to export", "error");
+        return;
+    }
+
+    try {
+        const response = await fetch('/export_pdf', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(scanToExport)
+        });
+
+        if (response.ok) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `webscrub_${scanToExport.target.replace(/[^a-z0-9]/gi, '_')}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        } else {
+            logToTerminal("Failed to generate PDF", "error");
+        }
+    } catch (error) {
+        logToTerminal("Error exporting PDF: " + error, "error");
+    }
+}
+
 function displayResults(data) {
+    currentScanData = data;
     document.getElementById('scan-view').classList.add('hidden');
     document.getElementById('results-view').classList.remove('hidden');
     resetButton(false);
@@ -102,7 +136,7 @@ function displayResults(data) {
 
     const vulnList = document.getElementById('vuln-list');
     vulnList.innerHTML = '';
-
+    
     if (data.vulnerabilities.length === 0) {
         vulnList.innerHTML = '<li class="vuln-item" style="border-color: var(--accent);">No core vulnerabilities detected.</li>';
     } else {
@@ -114,15 +148,15 @@ function displayResults(data) {
         });
     }
 
-    document.getElementById('res-scapy').innerText = "SSL/TLS Info:\n" + JSON.stringify(data.ssl_info, null, 2) +
-        "\n\nDNS Records:\n" + JSON.stringify(data.dns_info, null, 2);
+    document.getElementById('res-scapy').innerText = "SSL/TLS Info:\n" + JSON.stringify(data.ssl_info, null, 2) + 
+                                                   "\n\nDNS Records:\n" + JSON.stringify(data.dns_info, null, 2);
     document.getElementById('res-nmap').innerText = "Response Headers:\n" + JSON.stringify(data.raw_headers, null, 2);
 }
 
 function renderHistory() {
     const container = document.getElementById('history-list');
     if (!container) return;
-
+    
     if (scanHistory.length === 0) {
         container.innerHTML = '<p class="empty-msg">No previous scan history found.</p>';
         return;
@@ -132,14 +166,41 @@ function renderHistory() {
     scanHistory.forEach((scan, index) => {
         const item = document.createElement('div');
         item.className = 'history-item';
-        item.onclick = () => viewHistoryItem(index);
-        item.innerHTML = `
-            <div>
-                <div class="hist-target">${scan.target}</div>
-                <small style="color: var(--text-muted)">${scan.timestamp}</small>
-            </div>
-            <div class="hist-score">${scan.risk_score}/10</div>
+        
+        const content = document.createElement('div');
+        content.style.flex = "1";
+        content.onclick = () => viewHistoryItem(index);
+        content.innerHTML = `
+            <div class="hist-target">${scan.target}</div>
+            <small style="color: var(--text-muted)">${scan.timestamp}</small>
         `;
+
+        const meta = document.createElement('div');
+        meta.style.display = "flex";
+        meta.style.alignItems = "center";
+        meta.style.gap = "15px";
+        
+        const score = document.createElement('div');
+        score.className = 'hist-score';
+        score.innerText = `${scan.risk_score}/10`;
+        
+        const downloadBtn = document.createElement('button');
+        downloadBtn.className = 'btn-icon';
+        downloadBtn.style.background = "none";
+        downloadBtn.style.border = "none";
+        downloadBtn.style.color = "var(--accent)";
+        downloadBtn.style.cursor = "pointer";
+        downloadBtn.innerHTML = '<i class="fas fa-download"></i>';
+        downloadBtn.onclick = (e) => {
+            e.stopPropagation();
+            exportPDF(scan);
+        };
+
+        meta.appendChild(score);
+        meta.appendChild(downloadBtn);
+        
+        item.appendChild(content);
+        item.appendChild(meta);
         container.appendChild(item);
     });
 }
@@ -159,8 +220,4 @@ function resetView() {
     document.getElementById('results-view').classList.add('hidden');
     document.getElementById('scan-view').classList.remove('hidden');
     logToTerminal("System ready.", "info");
-}
-
-function exportPDF() {
-    window.location.href = '/export_pdf';
 }

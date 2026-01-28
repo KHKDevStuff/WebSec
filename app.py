@@ -33,31 +33,43 @@ def scan():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/export_pdf')
+@app.route('/export_pdf', methods=['GET', 'POST'])
 def export_pdf():
     global last_scan_result
-    if not last_scan_result:
-        return "No scan available", 400
+    
+    # If POST, data comes from the request body (e.g., from History)
+    if request.method == 'POST':
+        data = request.json
+    else:
+        # If GET, use the last successful scan
+        data = last_scan_result
+
+    if not data:
+        return "No scan available to export", 400
     
     pdf = PDFReport()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
     
-    pdf.cell(200, 10, txt=f"Target: {last_scan_result.get('target')}", ln=1)
-    pdf.cell(200, 10, txt=f"Risk Score: {last_scan_result.get('risk_score')}/10", ln=1)
+    pdf.cell(200, 10, txt=f"Target: {data.get('target', 'N/A')}", ln=1)
+    pdf.cell(200, 10, txt=f"Risk Score: {data.get('risk_score', 0)}/10", ln=1)
+    pdf.cell(200, 10, txt=f"IP Address: {data.get('ip', 'N/A')}", ln=1)
     pdf.ln(10)
 
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(200, 10, txt="Vulnerabilities:", ln=1)
     pdf.set_font("Arial", size=10)
-    for v in last_scan_result.get('vulnerabilities', []):
-        pdf.cell(200, 10, txt=f"[{v['severity']}] {v['name']}", ln=1)
-        pdf.multi_cell(0, 5, txt=v['description'])
+    for v in data.get('vulnerabilities', []):
+        pdf.set_text_color(200, 0, 0)
+        pdf.cell(200, 10, txt=f"[{v.get('severity')}] {v.get('name')}", ln=1)
+        pdf.set_text_color(0, 0, 0)
+        pdf.multi_cell(0, 5, txt=v.get('description', ''))
         pdf.ln(2)
 
     filename = "webscrub_report.pdf"
-    pdf.output(filename)
-    return send_file(filename, as_attachment=True)
+    full_path = os.path.join(os.getcwd(), filename)
+    pdf.output(full_path)
+    return send_file(full_path, as_attachment=True)
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
