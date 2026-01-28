@@ -1,0 +1,9 @@
+@echo off
+echo Starting WebScrub Security Scanner...
+echo.
+echo Checking dependencies...
+pip install -r requirements.txt
+echo.
+echo Launching App...
+python app.py
+pause
