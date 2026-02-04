@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scan History | WebScrub</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+
+<body>
+    <div class="app-container">
+        <nav class="sidebar">
+            <div class="logo">
+                <i class="fas fa-shield-alt"></i> WebScrub
+            </div>
+            <ul class="nav-links">
+                <li><a href="{{ url_for('index') }}"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
+                <li class="active"><a href="#"><i class="fas fa-history"></i> History</a></li>
+                <li><a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
+            </ul>
+        </nav>
+
+        <main class="main-content">
+            <header>
+                <h2>Scan History</h2>
+                <div class="status-indicator">
+                    User: <span class="status-online">{{ current_user.username }}</span>
+                </div>
+            </header>
+
+            <div class="content-section">
+                <div class="history-container">
+                    {% if scans %}
+                    {% for scan in scans %}
+                    <div class="history-item">
+                        <div class="hist-info">
+                            <div class="hist-target">{{ scan.target }}</div>
+                            <div style="color: var(--text-muted); font-size: 0.9rem;">{{
+                                scan.timestamp.strftime('%Y-%m-%d %H:%M') }}</div>
+                        </div>
+                        <div class="hist-score">
+                            Risk Score: <strong>{{ scan.risk_score }}</strong>
+                        </div>
+                        <div class="hist-actions">
+                            <!-- Could add view/download functionality here later -->
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <p class="empty-msg">No scans performed yet.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </main>
+    </div>
+</body>
+
+</html>

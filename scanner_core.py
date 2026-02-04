@@ -5,6 +5,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 import dns.resolver
 import logging
+import re
 
 class SecurityScanner:
     def __init__(self):
@@ -63,6 +64,32 @@ class SecurityScanner:
         except:
             return {}
 
+    def check_csrf(self, soup, url):
+        issues = []
+        forms = soup.find_all('form')
+        for form in forms:
+            if not form.find(attrs={'name': re.compile(r'csrf', re.I)}) and \
+               not form.find(attrs={'id': re.compile(r'csrf', re.I)}) and \
+               not form.find(attrs={'name': re.compile(r'token', re.I)}):
+                issues.append({
+                    "name": "Missing CSRF Token",
+                    "severity": "Medium",
+                    "description": f"Form at {url} appears to be missing a CSRF token."
+                })
+        return issues
+
+    def check_open_redirect(self, soup):
+        issues = []
+        for a in soup.find_all('a', href=True):
+            href = a['href']
+            if any(x in href for x in ['redirect=', 'next=', 'url=', 'dest=']):
+                issues.append({
+                    "name": "Potential Open Redirect",
+                    "severity": "Low",
+                    "description": f"Link {href} contains parameters often used for open redirects."
+                })
+        return issues
+
     def simple_xss_check(self, url):
         xss_payload = "<script>alert('WebScrub')</script>"
         try:
@@ -80,7 +107,9 @@ class SecurityScanner:
             pass
         return []
 
-    def perform_full_scan(self, target):
+
+
+    def perform_full_scan(self, target, max_pages=1):
         if not target.startswith('http'):
             url = f"https://{target}"
         else:
@@ -88,42 +117,94 @@ class SecurityScanner:
             
         domain = self.get_domain(url)
         
+        # Base Results Structure
         results = {
             "target": url,
             "domain": domain,
-            "ip": socket.gethostbyname(domain) if domain else "N/A",
+            "ip": "N/A",
             "vulnerabilities": [],
-            "ssl_info": self.check_ssl(domain),
-            "dns_info": self.check_dns(domain),
+            "ssl_info": {},
+            "dns_info": {},
             "risk_score": 0
         }
 
-        # 1. Header Analysis
-        header_vulns, raw_headers = self.check_headers(url)
-        results["vulnerabilities"].extend(header_vulns)
-        results["raw_headers"] = dict(raw_headers)
-
-        # 2. XSS Mock Check
-        xss_vulns = self.simple_xss_check(url)
-        results["vulnerabilities"].extend(xss_vulns)
-
-        # 3. BeautifulSoup - Check for sensitive comments
         try:
-            resp = self.session.get(url, timeout=10)
-            soup = BeautifulSoup(resp.text, 'html.parser')
-            # Look for comments - often contain dev notes
-            import re
-            comments = soup.find_all(string=lambda text: isinstance(text, str) and '<!--' in text)
-            if len(comments) > 0:
-                 results["vulnerabilities"].append({
-                    "name": "Information Leakage (Comments)",
-                    "severity": "Low",
-                    "description": f"Found {len(comments)} HTML comments which might contain sensitive internal info."
-                })
+            results["ip"] = socket.gethostbyname(domain)
         except:
             pass
+            
+        # Infrastructure Checks (Once per domain)
+        results["ssl_info"] = self.check_ssl(domain)
+        results["dns_info"] = self.check_dns(domain)
+
+        # Crawling & Page Analysis
+        to_visit = [url]
+        visited = set()
+        
+        count = 0
+        while to_visit and count < max_pages:
+            current_url = to_visit.pop(0)
+            if current_url in visited:
+                continue
+            visited.add(current_url)
+            count += 1
+            
+            try:
+                resp = self.session.get(current_url, timeout=10)
+                soup = BeautifulSoup(resp.text, 'html.parser')
+                
+                # 1. Header Analysis (on first page or all? doing all for now but merging results might be noisy)
+                # For simplicity, we stick to main URL for headers in the summary, 
+                # but if we find issues on subpages we add them.
+                header_vulns, raw_headers = self.check_headers(current_url)
+                if count == 1:
+                    results["raw_headers"] = dict(raw_headers)
+                results["vulnerabilities"].extend(header_vulns)
+
+                # 2. XSS Mock Check
+                xss_vulns = self.simple_xss_check(current_url)
+                results["vulnerabilities"].extend(xss_vulns)
+                
+                # 3. CSRF Check
+                csrf_vulns = self.check_csrf(soup, current_url)
+                results["vulnerabilities"].extend(csrf_vulns)
+
+                # 4. Open Redirect Check
+                redir_vulns = self.check_open_redirect(soup)
+                results["vulnerabilities"].extend(redir_vulns)
+
+                # 5. Information Leakage (Comments)
+                comments = soup.find_all(string=lambda text: isinstance(text, str) and '<!--' in text)
+                if len(comments) > 0:
+                     results["vulnerabilities"].append({
+                        "name": f"Information Leakage (Comments) on {current_url}",
+                        "severity": "Low",
+                        "description": f"Found {len(comments)} HTML comments."
+                    })
+                
+                # Crawl Logic: Find internal links
+                if max_pages > 1:
+                    for a in soup.find_all('a', href=True):
+                        full = urljoin(url, a['href'])
+                        if self.get_domain(full) == domain and full not in visited:
+                            to_visit.append(full)
+                            
+            except Exception as e:
+                # Log error but continue
+                continue
+
+        # Deduplicate vulnerabilities
+        unique_vulns = []
+        seen_vulns = set()
+        for v in results["vulnerabilities"]:
+            key = (v['name'], v.get('description', ''))
+            if key not in seen_vulns:
+                seen_vulns.add(key)
+                unique_vulns.append(v)
+        results["vulnerabilities"] = unique_vulns
 
         # Calculate Risk Score
+        results["risk_score"] = 0
         for v in results["vulnerabilities"]:
             if v["severity"] == "High": results["risk_score"] += 3
             if v["severity"] == "Medium": results["risk_score"] += 1.5

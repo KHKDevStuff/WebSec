@@ -22,10 +22,12 @@
             <ul class="nav-links">
                 <li class="active" id="nav-dashboard"><a href="#" onclick="showSection('new-scan')"><i
                             class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-                <li id="nav-reports"><a href="#" onclick="showSection('reports')"><i class="fas fa-file-alt"></i>
-                        Reports</a></li>
+                <li id="nav-history"><a href="{{ url_for('history') }}"><i class="fas fa-history"></i>
+                        History</a></li>
                 <li id="nav-settings"><a href="#" onclick="showSection('settings')"><i class="fas fa-cog"></i>
                         Settings</a></li>
+                <li id="nav-logout"><a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i>
+                        Logout</a></li>
             </ul>
         </nav>
 
