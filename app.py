@@ -11,7 +11,14 @@ import json
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'supersecretkey_change_in_production')
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+
+# Check for DATABASE_URL or POSTGRES_URL (Vercel default), fallback to SQLite
+uri = os.environ.get('DATABASE_URL') or os.environ.get('POSTGRES_URL') or 'sqlite:///users.db'
+
+if uri and uri.startswith("postgres://"):
+    uri = uri.replace("postgres://", "postgresql://", 1)
+    
+app.config['SQLALCHEMY_DATABASE_URI'] = uri
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)

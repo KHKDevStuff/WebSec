@@ -7,3 +7,4 @@ flask_sqlalchemy
 flask_login
 werkzeug
 email_validator
+psycopg2-binary
