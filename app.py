@@ -27,6 +27,10 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
+# Ensure database tables exist (Critical for Vercel)
+with app.app_context():
+    db.create_all()
+
 scanner = SecurityScanner()
 
 # In-memory storage for scan jobs
