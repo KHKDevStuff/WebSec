@@ -2,9 +2,7 @@ flask
 requests
 beautifulsoup4
 dnspython
-fpdf
-flask_sqlalchemy
-flask_login
+flask-sqlalchemy
+flask-login
 werkzeug
-email_validator
-psycopg2-binary
+xhtml2pdf

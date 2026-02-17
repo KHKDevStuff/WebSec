@@ -4,156 +4,105 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebScrub | Security Scanner</title>
+    <title>Web Security Scanner</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;700&display=swap"
-        rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 
 <body>
-    <div class="app-container">
-        <!-- Sidebar -->
-        <nav class="sidebar" id="sidebar">
+    <div class="container">
+        <header class="glass-panel" style="padding: 20px;">
             <div class="logo">
-                <i class="fas fa-shield-alt"></i> WebScrub
+                <h1>Web Security Scanner <span style="font-size: 0.5em; color: var(--secondary-color);"></span></h1>
             </div>
-            <ul class="nav-links">
-                <li class="active" id="nav-dashboard"><a href="#" onclick="showSection('new-scan')"><i
-                            class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-                <li id="nav-history"><a href="{{ url_for('history') }}"><i class="fas fa-history"></i>
-                        History</a></li>
-                <li id="nav-settings"><a href="#" onclick="showSection('settings')"><i class="fas fa-cog"></i>
-                        Settings</a></li>
-                <li id="nav-logout"><a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i>
-                        Logout</a></li>
-            </ul>
-        </nav>
+            <nav>
+                <ul>
+                    <li><a href="#" class="active">Scanner</a></li>
+                    {% if current_user.role == 'admin' %}
+                    <li><a href="{{ url_for('history') }}">History</a></li>
+                    {% endif %}
+                    <li><a href="{{ url_for('logout') }}">Logout</a></li>
+                </ul>
+            </nav>
+        </header>
 
-        <!-- Main Content -->
-        <main class="main-content">
-            <header>
-                <div class="mobile-toggle" onclick="toggleSidebar()">
-                    <i class="fas fa-bars"></i>
+        <main>
+            <div class="wrapper">
+                <div class="scan-options">
+                    <div class="option-card glass-panel">
+                        <i class="fas fa-shield-alt"></i>
+                        <h3>Header & Clickjacking</h3>
+                        <p>Checks for missing security headers like X-Frame-Options and CSP.</p>
+                    </div>
+                    <div class="option-card glass-panel">
+                        <i class="fas fa-database"></i>
+                        <h3>SQL Injection</h3>
+                        <p>Basic heuristic check for SQL injection patterns in URLs.</p>
+                    </div>
+                    <div class="option-card glass-panel">
+                        <i class="fas fa-code"></i>
+                        <h3>XSS & CSRF</h3>
+                        <p>Detects reflected XSS and missing CSRF tokens in forms.</p>
+                    </div>
+                    <div class="option-card glass-panel">
+                        <i class="fas fa-lock"></i>
+                        <h3>SSL/TLS Check</h3>
+                        <p>Validates SSL certificate and issuer information.</p>
+                    </div>
                 </div>
-                <div class="status-indicator">
-                    System Status: <span class="status-online">ONLINE <span class="dot"></span></span>
-                </div>
-            </header>
 
-            <!-- Dashboard / New Scan View -->
-            <div id="scan-view" class="content-section">
-                <div class="hero-card">
-                    <h1>Initialise Security Protocol</h1>
-                    <p>Enter target URL or IP address to begin vulnerability assessment.</p>
+                <div class="scan-box glass-panel">
+                    <h2>Initiate Scan</h2>
+                    <p style="color: var(--text-muted); margin-bottom: 30px;">Enter target domain (e.g., example.com) to
+                        begin assessment.</p>
 
-                    <div class="input-group">
-                        <input type="text" id="target-url" placeholder="e.g., https://example.com" autocomplete="off">
-                        <button id="scan-btn" onclick="startScan()">
-                            INITIATE SCAN <i class="fas fa-bolt"></i>
+                    <div class="form-group" style="display: flex; gap: 10px; max-width: 500px; margin: 0 auto;">
+                        <input type="text" id="target" placeholder="https://example.com" required>
+                        <button class="btn-primary" onclick="startScan()">
+                            <i class="fas fa-search"></i> Scan
                         </button>
                     </div>
 
-                    <div class="options-grid">
-                        <div class="option-card active">
-                            <i class="fas fa-heading"></i>
-                            <span>Header Analysis</span>
-                            <div class="toggle">ON</div>
+                    <div id="progress-container" class="progress-container" style="display: none;">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progress-fill"></div>
                         </div>
-                        <div class="option-card active">
-                            <i class="fas fa-lock"></i>
-                            <span>SSL/TLS Check</span>
-                            <div class="toggle">ON</div>
-                        </div>
-                        <div class="option-card active">
-                            <i class="fas fa-search"></i>
-                            <span>DNS Recon</span>
-                            <div class="toggle">ON</div>
-                        </div>
-                        <div class="option-card active">
-                            <i class="fas fa-bug"></i>
-                            <span>Vulnerability Probe</span>
-                            <div class="toggle">ON</div>
-                        </div>
+                        <p class="status-text" id="status-text">Initializing...</p>
                     </div>
                 </div>
 
-                <!-- Terminal Output -->
-                <div class="terminal-window">
-                    <div class="term-header">
-                        <span class="term-dot red"></span>
-                        <span class="term-dot yellow"></span>
-                        <span class="term-dot green"></span>
-                        <span class="term-title">Live Sequence Log</span>
-                    </div>
-                    <div class="term-body" id="terminal-log">
-                        <p>> Aegis System Ready...</p>
-                        <p>> Waiting for target...</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Results View -->
-            <div id="results-view" class="content-section hidden">
-                <div class="results-header">
-                    <h2>Scan Report: <span id="res-target" class="accent-text"></span></h2>
-                    <div class="report-actions">
-                        <button class="btn-secondary" onclick="exportPDF()">
-                            <i class="fas fa-file-pdf"></i> Export PDF
-                        </button>
-                        <button class="btn-secondary" onclick="resetView()">
-                            <i class="fas fa-arrow-left"></i> Back
+                <div id="results-area" class="glass-panel" style="margin-top: 40px; padding: 30px; display: none;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h2>Scan Results</h2>
+                        <button class="btn-primary" onclick="downloadReport()"
+                            style="padding: 8px 16px; font-size: 0.9em;">
+                            <i class="fas fa-file-pdf"></i> Download Report
                         </button>
                     </div>
-                </div>
-                <div class="risk-badge-container">
-                    Risk Score: <span id="res-score">0.0</span>/10
-                </div>
 
-                <div class="results-grid">
-                    <div class="card val-list">
-                        <h3>Vulnerabilities Detected</h3>
-                        <ul id="vuln-list" class="vuln-items"></ul>
-                    </div>
-                    <div class="card details-panel">
-                        <h3>Analysis Details</h3>
-                        <div id="detail-content">
-                            <div class="detail-block">
-                                <h4>IP Address</h4>
-                                <p id="res-ip">N/A</p>
-                            </div>
-                            <div class="detail-block">
-                                <h4>Network Analysis</h4>
-                                <pre id="res-scapy" class="code-block">No Data</pre>
-                            </div>
-                            <div class="detail-block">
-                                <h4>Response Headers</h4>
-                                <pre id="res-nmap" class="code-block">No Data</pre>
-                            </div>
+                    <div class="result-summary"
+                        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px;">
+                        <div class="info-card"
+                            style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
+                            <h4>Risk Score</h4>
+                            <div id="risk-score"
+                                style="font-size: 2rem; font-weight: bold; color: var(--primary-color);">0/10</div>
+                        </div>
+                        <div class="info-card"
+                            style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
+                            <h4>Target IP</h4>
+                            <div id="target-ip" style="font-size: 1.2rem;">-</div>
+                        </div>
+                        <div class="info-card"
+                            style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
+                            <h4>Vulnerabilities</h4>
+                            <div id="vuln-count" style="font-size: 2rem; font-weight: bold;">0</div>
                         </div>
                     </div>
-                </div>
-            </div>
 
-            <!-- Reports View -->
-            <div id="reports-view" class="content-section hidden">
-                <div class="card">
-                    <h3>Scan History</h3>
-                    <div id="history-list" class="history-container">
-                        <p class="empty-msg">No previous scan history found.</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Settings View -->
-            <div id="settings-view" class="content-section hidden">
-                <div class="card">
-                    <h3>System Configuration</h3>
-                    <div class="detail-block">
-                        <p><strong>Version:</strong> 1.1.0 (Responsive Edition)</p>
-                        <p><strong>Core:</strong> Python 3.x / Flask</p>
-                        <p><strong>Engines:</strong> BeautifulSoup4, Requests, DNSPython</p>
+                    <div id="vuln-list" class="vuln-list">
+                        <!-- Vulnerabilities injected here -->
                     </div>
                 </div>
             </div>

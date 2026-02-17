@@ -1,63 +1,177 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scan History | WebScrub</title>
+    <title>WebScrub | History</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;700&display=swap"
-        rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
-
 <body>
-    <div class="app-container">
-        <nav class="sidebar">
+    <div class="container">
+        <header class="glass-panel" style="padding: 20px; margin-top: 20px;">
             <div class="logo">
-                <i class="fas fa-shield-alt"></i> WebScrub
+                <h1>WebScrub <span style="font-size: 0.5em; color: var(--primary-color);">ADMIN</span></h1>
             </div>
-            <ul class="nav-links">
-                <li><a href="{{ url_for('index') }}"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-                <li class="active"><a href="#"><i class="fas fa-history"></i> History</a></li>
-                <li><a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
-            </ul>
-        </nav>
+            <nav>
+                <ul>
+                    <li><a href="{{ url_for('index') }}">Scanner</a></li>
+                    <li><a href="{{ url_for('history') }}" class="active">History</a></li>
+                    <li><a href="{{ url_for('logout') }}">Logout</a></li>
+                </ul>
+            </nav>
+        </header>
 
-        <main class="main-content">
-            <header>
-                <h2>Scan History</h2>
-                <div class="status-indicator">
-                    User: <span class="status-online">{{ current_user.username }}</span>
-                </div>
-            </header>
-
-            <div class="content-section">
-                <div class="history-container">
+        <main>
+            <div class="glass-panel" style="padding: 30px;">
+                <h2 style="margin-top: 0;">Scan History</h2>
+                
+                <div class="history-list">
                     {% if scans %}
                     {% for scan in scans %}
-                    <div class="history-item">
+                    <div class="history-item glass-panel" style="background: rgba(255,255,255,0.02);">
                         <div class="hist-info">
-                            <div class="hist-target">{{ scan.target }}</div>
-                            <div style="color: var(--text-muted); font-size: 0.9rem;">{{
-                                scan.timestamp.strftime('%Y-%m-%d %H:%M') }}</div>
-                        </div>
-                        <div class="hist-score">
-                            Risk Score: <strong>{{ scan.risk_score }}</strong>
+                            <h3>{{ scan.target }} <span class="risk-badge risk-{{ 'High' if scan.risk_score > 7 else 'Medium' if scan.risk_score > 4 else 'Low' }}">{{ scan.risk_score }}/10</span></h3>
+                            <div class="hist-meta">
+                                <span><i class="fas fa-clock"></i> {{ scan.timestamp.strftime('%Y-%m-%d %H:%M') }}</span>
+                                <span style="margin-left: 15px;"><i class="fas fa-network-wired"></i> {{ scan.ip_address }}</span>
+                                <span style="margin-left: 15px;"><i class="fas fa-user-shield"></i> {{ scan.user.username }}</span>
+                            </div>
                         </div>
                         <div class="hist-actions">
-                            <!-- Could add view/download functionality here later -->
+                            <button onclick="viewScan({{ scan.id }})" class="btn-icon" title="View Details">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button onclick="downloadPDF({{ scan.id }})" class="btn-icon" title="Download PDF">
+                                <i class="fas fa-file-pdf"></i>
+                            </button>
+                            <button onclick="deleteScan({{ scan.id }})" class="btn-icon" title="Delete Scan" style="color: var(--danger); border-color: rgba(255, 51, 51, 0.3);">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
                         </div>
                     </div>
                     {% endfor %}
                     {% else %}
-                    <p class="empty-msg">No scans performed yet.</p>
+                    <p class="empty-msg" style="text-align: center; color: var(--text-muted);">No scan history available.</p>
                     {% endif %}
                 </div>
             </div>
+
+            <!-- Detail Modal -->
+            <div id="detailModal" class="modal">
+                <div class="modal-content glass-panel">
+                    <span class="close-btn" onclick="closeModal()">&times;</span>
+                    <h2 id="modalTitle">Scan Details</h2>
+                    <div id="modalBody">
+                        <!-- Content loaded dynamically -->
+                    </div>
+                    <div style="margin-top: 20px; text-align: right;">
+                        <button onclick="exportCurrentDetailPDF()" class="btn-primary">Download Report</button>
+                    </div>
+                </div>
+            </div>
+
+            <script>
+                let currentDetailId = null;
+
+                async function viewScan(id) {
+                    const modal = document.getElementById('detailModal');
+                    const body = document.getElementById('modalBody');
+                    const title = document.getElementById('modalTitle');
+                    
+                    body.innerHTML = '<p>Loading details...</p>';
+                    modal.classList.add('active');
+                    currentDetailId = id;
+
+                    try {
+                        const response = await fetch(`/scan_details/${id}`);
+                        const data = await response.json();
+                        
+                        if (data.error) throw new Error(data.error);
+                        
+                        title.innerText = `Report: ${data.target}`;
+                        
+                        let vulnsHtml = '';
+                        let vulns = [];
+                        try {
+                            vulns = typeof data.vulnerabilities === 'string' ? JSON.parse(data.vulnerabilities) : data.vulnerabilities;
+                        } catch(e) { vulns = [] }
+
+                        if (vulns.length === 0) {
+                            vulnsHtml = '<p>No vulnerabilities found.</p>';
+                        } else {
+                            vulnsHtml = '<ul style="list-style: none; padding: 0;">';
+                            vulns.forEach(v => {
+                                vulnsHtml += `
+                                <li style="background: rgba(255,255,255,0.05); padding: 15px; margin-bottom: 10px; border-radius: 8px; border-left: 4px solid var(--danger);">
+                                    <div style="display: flex; justify-content: space-between;">
+                                        <strong>${v.name || 'Unknown Issue'}</strong>
+                                        <span class="risk-badge risk-${v.severity}">${v.severity}</span>
+                                    </div>
+                                    <p style="margin: 5px 0 0 0; color: #ccc; font-size: 0.9em;">${v.description || ''}</p>
+                                </li>`;
+                            });
+                            vulnsHtml += '</ul>';
+                        }
+                        
+                        body.innerHTML = `
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                                <div>
+                                    <p><strong>Date:</strong> ${data.timestamp}</p>
+                                    <p><strong>IP:</strong> ${data.ip_address}</p>
+                                </div>
+                                <div style="text-align: right;">
+                                    <p><strong>Risk Score:</strong> <span style="font-size: 1.2em; color: var(--primary-color);">${data.risk_score}/10</span></p>
+                                </div>
+                            </div>
+                            <h3>Findings</h3>
+                            ${vulnsHtml}
+                        `;
+                    } catch (e) {
+                        body.innerHTML = `<p style="color: var(--danger);">Error loading details: ${e.message}</p>`;
+                    }
+                }
+
+                function closeModal() {
+                    document.getElementById('detailModal').classList.remove('active');
+                }
+                
+                function downloadPDF(id) {
+                    window.location.href = `/download_scan_pdf/${id}`;
+                }
+
+                function exportCurrentDetailPDF() {
+                    if (currentDetailId) {
+                        downloadPDF(currentDetailId);
+                    }
+                }
+
+                async function deleteScan(scanId) {
+                    if (!confirm("Are you sure you want to permanently delete this scan record?")) return;
+
+                    try {
+                        const response = await fetch(`/delete_scan/${scanId}`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            // Reload page to reflect changes
+                            window.location.reload();
+                        } else {
+                            alert(data.error || "Failed to delete scan");
+                        }
+                    } catch (e) {
+                        console.error(e);
+                        alert("Error deleting scan record");
+                    }
+                }
+            </script>
         </main>
     </div>
 </body>
-
 </html>

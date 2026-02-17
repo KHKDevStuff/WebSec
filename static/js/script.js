@@ -1,68 +1,19 @@
-let scanHistory = [];
-
-function toggleSidebar() {
-    document.getElementById('sidebar').classList.toggle('open');
-}
-
-function showSection(sectionId) {
-    // Hide all sections
-    document.querySelectorAll('.content-section').forEach(el => el.classList.add('hidden'));
-
-    // Update Nav Active State
-    document.querySelectorAll('.nav-links li').forEach(el => el.classList.remove('active'));
-
-    const navItems = {
-        'new-scan': 'nav-dashboard',
-        'reports': 'nav-reports',
-        'settings': 'nav-settings'
-    };
-
-    if (sectionId in navItems) {
-        if (sectionId === 'new-scan') {
-            document.getElementById('scan-view').classList.remove('hidden');
-        } else {
-            document.getElementById(sectionId + '-view').classList.remove('hidden');
-        }
-        document.getElementById(navItems[sectionId]).classList.add('active');
-
-        if (sectionId === 'reports') {
-            renderHistory();
-        }
-    } else {
-        // Fallback to dashboard
-        document.getElementById('scan-view').classList.remove('hidden');
-        document.getElementById('nav-dashboard').classList.add('active');
-    }
-
-    // Close sidebar on mobile after selection
-    if (window.innerWidth <= 992) {
-        document.getElementById('sidebar').classList.remove('open');
-    }
-}
-
-function logToTerminal(message, type = 'info') {
-    const term = document.getElementById('terminal-log');
-    if (!term) return;
-    const p = document.createElement('p');
-    p.classList.add('log-entry', `log-${type}`);
-    const time = new Date().toLocaleTimeString();
-    p.innerText = `[${time}] ${message}`;
-    term.appendChild(p);
-    term.scrollTop = term.scrollHeight;
-}
+let currentJobId = null;
+let pollInterval = null;
+let currentScanData = null; // Store for PDF generation
 
 async function startScan() {
-    const urlInput = document.getElementById('target-url');
-    const target = urlInput.value.trim();
+    const target = document.getElementById('target').value;
     if (!target) {
-        logToTerminal("Error: No target specified", "error");
+        alert("Please enter a target URL");
         return;
     }
 
-    resetButton(true);
-    logToTerminal(`Initiating sequence for: ${target}`, "info");
-    logToTerminal("Connecting to module services...", "info");
-    logToTerminal("Scanning for headers and SSL status...", "info");
+    // Reset UI
+    document.getElementById('results-area').style.display = 'none';
+    document.getElementById('progress-container').style.display = 'block';
+    document.getElementById('progress-fill').style.width = '0%';
+    document.getElementById('status-text').innerText = 'Initializing...';
 
     try {
         const response = await fetch('/scan', {
@@ -72,39 +23,112 @@ async function startScan() {
         });
 
         const data = await response.json();
-        if (response.status !== 200 || data.error) {
-            logToTerminal(`Scan failed: ${data.error}`, "error");
-            resetButton(false);
+
+        if (data.error) {
+            alert(data.error);
             return;
         }
 
-        logToTerminal("Sequence complete. Analysing gathered intel...", "success");
+        currentJobId = data.job_id;
+        pollInterval = setInterval(checkStatus, 1000);
 
-        // Add to local history
-        data.timestamp = new Date().toLocaleString();
-        scanHistory.unshift(data);
-
-        displayResults(data);
-    } catch (error) {
-        logToTerminal(`Network Error: ${error}`, "error");
-        resetButton(false);
+    } catch (e) {
+        console.error(e);
+        alert("Failed to start scan");
     }
 }
 
-let currentScanData = null;
+async function checkStatus() {
+    if (!currentJobId) return;
 
-async function exportPDF(data = null) {
-    const scanToExport = data || currentScanData;
-    if (!scanToExport) {
-        logToTerminal("No report data to export", "error");
-        return;
+    try {
+        const response = await fetch(`/scan_status/${currentJobId}`);
+        const data = await response.json();
+
+        // Update Progress
+        document.getElementById('progress-fill').style.width = `${data.progress}%`;
+        document.getElementById('status-text').innerText = data.message;
+
+        if (data.status === 'completed') {
+            clearInterval(pollInterval);
+            displayResults(data.result);
+        } else if (data.status === 'failed') {
+            clearInterval(pollInterval);
+            alert(`Scan Failed: ${data.error}`);
+            document.getElementById('status-text').innerText = 'Failed.';
+        }
+
+    } catch (e) {
+        console.error(e);
     }
+}
+
+function displayResults(data) {
+    currentScanData = data;
+    const resultsArea = document.getElementById('results-area');
+    const vulnList = document.getElementById('vuln-list');
+
+    // Summary
+    document.getElementById('risk-score').innerText = `${data.risk_score}/10`;
+    document.getElementById('target-ip').innerText = data.ip;
+    document.getElementById('vuln-count').innerText = data.vulnerabilities.length;
+
+    // Risk Color
+    const riskEl = document.getElementById('risk-score');
+    if (data.risk_score > 7) riskEl.style.color = '#ff3333'; // Critical
+    else if (data.risk_score > 4) riskEl.style.color = '#ffa500'; // Med
+    else riskEl.style.color = '#00ff6a'; // Low
+
+    // Vuln List
+    vulnList.innerHTML = '';
+    if (data.vulnerabilities.length === 0) {
+        vulnList.innerHTML = '<p class="glass-panel" style="padding: 20px; text-align: center;">No vulnerabilities found. Good job!</p>';
+    } else {
+        data.vulnerabilities.forEach(v => {
+            const card = document.createElement('div');
+            card.className = 'glass-panel';
+            card.style.padding = '20px';
+            card.style.marginBottom = '15px';
+            card.style.borderLeft = `4px solid ${getSeverityColor(v.severity)}`;
+            card.style.background = 'rgba(255,255,255,0.02)';
+
+            card.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h4 style="margin: 0; color: #fff;">${v.name}</h4>
+                    <span style="background: ${getSeverityColor(v.severity)}20; color: ${getSeverityColor(v.severity)}; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">
+                        ${v.severity}
+                    </span>
+                </div>
+                <p style="margin: 0; color: var(--text-muted); font-size: 0.9rem;">${v.description}</p>
+            `;
+            vulnList.appendChild(card);
+        });
+    }
+
+    resultsArea.style.display = 'block';
+
+    // Scroll to results
+    resultsArea.scrollIntoView({ behavior: 'smooth' });
+}
+
+function getSeverityColor(severity) {
+    switch (severity) {
+        case 'Critical': return '#ff3333';
+        case 'High': return '#ff6b6b';
+        case 'Medium': return '#ffa500';
+        case 'Low': return '#20c997';
+        default: return '#ccc';
+    }
+}
+
+async function downloadReport() {
+    if (!currentScanData) return;
 
     try {
         const response = await fetch('/export_pdf', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(scanToExport)
+            body: JSON.stringify(currentScanData)
         });
 
         if (response.ok) {
@@ -112,112 +136,15 @@ async function exportPDF(data = null) {
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `webscrub_${scanToExport.target.replace(/[^a-z0-9]/gi, '_')}.pdf`;
+            a.download = `web_scan_report_${Date.now()}.pdf`;
             document.body.appendChild(a);
             a.click();
             a.remove();
         } else {
-            logToTerminal("Failed to generate PDF", "error");
+            alert("Failed to generate PDF");
         }
-    } catch (error) {
-        logToTerminal("Error exporting PDF: " + error, "error");
+    } catch (e) {
+        console.error(e);
+        alert("Error downloading report");
     }
-}
-
-function displayResults(data) {
-    currentScanData = data;
-    document.getElementById('scan-view').classList.add('hidden');
-    document.getElementById('results-view').classList.remove('hidden');
-    resetButton(false);
-
-    document.getElementById('res-target').innerText = data.target;
-    document.getElementById('res-score').innerText = data.risk_score;
-    document.getElementById('res-ip').innerText = data.ip;
-
-    const vulnList = document.getElementById('vuln-list');
-    vulnList.innerHTML = '';
-    
-    if (data.vulnerabilities.length === 0) {
-        vulnList.innerHTML = '<li class="vuln-item" style="border-color: var(--accent);">No core vulnerabilities detected.</li>';
-    } else {
-        data.vulnerabilities.forEach(v => {
-            const li = document.createElement('li');
-            li.className = `vuln-item severity-${v.severity}`;
-            li.innerHTML = `<strong>[${v.severity}] ${v.name}</strong><br><small>${v.description}</small>`;
-            vulnList.appendChild(li);
-        });
-    }
-
-    document.getElementById('res-scapy').innerText = "SSL/TLS Info:\n" + JSON.stringify(data.ssl_info, null, 2) + 
-                                                   "\n\nDNS Records:\n" + JSON.stringify(data.dns_info, null, 2);
-    document.getElementById('res-nmap').innerText = "Response Headers:\n" + JSON.stringify(data.raw_headers, null, 2);
-}
-
-function renderHistory() {
-    const container = document.getElementById('history-list');
-    if (!container) return;
-    
-    if (scanHistory.length === 0) {
-        container.innerHTML = '<p class="empty-msg">No previous scan history found.</p>';
-        return;
-    }
-
-    container.innerHTML = '';
-    scanHistory.forEach((scan, index) => {
-        const item = document.createElement('div');
-        item.className = 'history-item';
-        
-        const content = document.createElement('div');
-        content.style.flex = "1";
-        content.onclick = () => viewHistoryItem(index);
-        content.innerHTML = `
-            <div class="hist-target">${scan.target}</div>
-            <small style="color: var(--text-muted)">${scan.timestamp}</small>
-        `;
-
-        const meta = document.createElement('div');
-        meta.style.display = "flex";
-        meta.style.alignItems = "center";
-        meta.style.gap = "15px";
-        
-        const score = document.createElement('div');
-        score.className = 'hist-score';
-        score.innerText = `${scan.risk_score}/10`;
-        
-        const downloadBtn = document.createElement('button');
-        downloadBtn.className = 'btn-icon';
-        downloadBtn.style.background = "none";
-        downloadBtn.style.border = "none";
-        downloadBtn.style.color = "var(--accent)";
-        downloadBtn.style.cursor = "pointer";
-        downloadBtn.innerHTML = '<i class="fas fa-download"></i>';
-        downloadBtn.onclick = (e) => {
-            e.stopPropagation();
-            exportPDF(scan);
-        };
-
-        meta.appendChild(score);
-        meta.appendChild(downloadBtn);
-        
-        item.appendChild(content);
-        item.appendChild(meta);
-        container.appendChild(item);
-    });
-}
-
-function viewHistoryItem(index) {
-    displayResults(scanHistory[index]);
-}
-
-function resetButton(loading) {
-    const btn = document.getElementById('scan-btn');
-    if (!btn) return;
-    btn.disabled = loading;
-    btn.innerHTML = loading ? 'SCANNING... <i class="fas fa-spinner fa-spin"></i>' : 'INITIATE SCAN <i class="fas fa-bolt"></i>';
-}
-
-function resetView() {
-    document.getElementById('results-view').classList.add('hidden');
-    document.getElementById('scan-view').classList.remove('hidden');
-    logToTerminal("System ready.", "info");
 }
