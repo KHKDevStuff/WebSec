@@ -14,10 +14,13 @@ from models import db, User, ScanResult
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'default_secret_key')
+
 # Database Configuration for Vercel (Neon Postgres)
 db_url = os.environ.get('DATABASE_URL') or os.environ.get('POSTGRES_URL')
 if db_url and db_url.startswith("postgres://"):
-    db_url = db_url.replace("postgres://", "postgresql://", 1)
+    db_url = db_url.replace("postgres://", "postgresql+pg8000://", 1)
+elif db_url and db_url.startswith("postgresql://"):
+    db_url = db_url.replace("postgresql://", "postgresql+pg8000://", 1)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url or 'sqlite:///:memory:'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -27,21 +30,37 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
-# Ensure database tables exist (Critical for Vercel)
-with app.app_context():
-    try:
-        db.create_all()
-    except Exception as e:
-        print(f"Database creation failed: {e}")
-
 scanner = SecurityScanner()
 
 # In-memory storage for scan jobs
 scan_jobs = {}
 
+# Initialize database tables - MUST be after all imports and app setup
+def init_db():
+    with app.app_context():
+        try:
+            # Import all models to ensure they're registered
+            from models import User, ScanResult
+            db.create_all()
+            print("✓ Database tables created successfully")
+        except Exception as e:
+            print(f"✗ Database initialization error: {e}")
+
+# Call initialization immediately
+init_db()
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
+
+@app.route('/setup_db')
+def setup_db():
+    """Manual database setup endpoint - visit this once after deployment"""
+    try:
+        db.create_all()
+        return "Database tables created successfully!", 200
+    except Exception as e:
+        return f"Error creating tables: {str(e)}", 500
 
 @app.route('/')
 def index():

@@ -5,5 +5,5 @@ dnspython
 flask-sqlalchemy
 flask-login
 werkzeug
-psycopg2-binary
+pg8000
 fpdf2
