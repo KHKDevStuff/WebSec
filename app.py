@@ -48,8 +48,30 @@ def init_db():
         try:
             # Import all models to ensure they're registered
             from models import User, ScanResult
-            db.create_all()
-            print("✓ Database tables created successfully")
+            
+            # Check if the user table exists but has wrong schema
+            # db.create_all() won't fix existing tables with missing columns
+            try:
+                from sqlalchemy import text
+                result = db.session.execute(text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'user' AND column_name = 'password_hash'"
+                ))
+                columns = result.fetchall()
+                if not columns:
+                    # Table exists but missing password_hash column - need to rebuild
+                    print("⚠ Schema mismatch detected - rebuilding tables...")
+                    db.drop_all()
+                    db.create_all()
+                    print("✓ Database tables rebuilt successfully")
+                else:
+                    db.create_all()
+                    print("✓ Database tables verified successfully")
+            except Exception:
+                # Table might not exist yet, or using SQLite - just create all
+                db.create_all()
+                print("✓ Database tables created successfully")
+                
         except Exception as e:
             print(f"✗ Database initialization error: {e}")
 
