@@ -69,6 +69,16 @@ def setup_db():
     except Exception as e:
         return f"Error creating tables: {str(e)}", 500
 
+@app.route('/reset_db')
+def reset_db():
+    """Drop and recreate all tables - fixes schema mismatches. WARNING: deletes all data!"""
+    try:
+        db.drop_all()
+        db.create_all()
+        return "Database tables dropped and recreated successfully! All data has been cleared.", 200
+    except Exception as e:
+        return f"Error resetting tables: {str(e)}", 500
+
 @app.route('/')
 def index():
     if not current_user.is_authenticated:
