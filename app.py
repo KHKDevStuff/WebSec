@@ -29,7 +29,10 @@ login_manager.login_view = 'login'
 
 # Ensure database tables exist (Critical for Vercel)
 with app.app_context():
-    db.create_all()
+    try:
+        db.create_all()
+    except Exception as e:
+        print(f"Database creation failed: {e}")
 
 scanner = SecurityScanner()
 
