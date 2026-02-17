@@ -11,10 +11,17 @@ app.config['SECRET_KEY'] = 'test'
 
 # Database Configuration
 db_url = os.environ.get('DATABASE_URL') or os.environ.get('POSTGRES_URL')
-if db_url and db_url.startswith("postgres://"):
-    db_url = db_url.replace("postgres://", "postgresql+pg8000://", 1)
-elif db_url and db_url.startswith("postgresql://"):
-    db_url = db_url.replace("postgresql://", "postgresql+pg8000://", 1)
+
+if db_url:
+    # Remove sslmode parameter if present (pg8000 doesn't support it in the URL)
+    if '?sslmode=' in db_url:
+        db_url = db_url.split('?sslmode=')[0]
+    
+    # Convert postgres:// to postgresql+pg8000://
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql+pg8000://", 1)
+    elif db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql+pg8000://", 1)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url or 'sqlite:///:memory:'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
