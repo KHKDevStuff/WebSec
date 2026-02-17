@@ -5,4 +5,4 @@ dnspython
 flask-sqlalchemy
 flask-login
 werkzeug
-xhtml2pdf
+fpdf2
