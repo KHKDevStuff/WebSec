@@ -8,7 +8,7 @@ import json
 import io
 import threading
 import uuid
-from xhtml2pdf import pisa
+
 from scanner_core import SecurityScanner
 from models import db, User, ScanResult
 
