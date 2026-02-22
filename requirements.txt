@@ -6,4 +6,4 @@ flask-sqlalchemy
 flask-login
 werkzeug
 pg8000
-fpdf2
+xhtml2pdf

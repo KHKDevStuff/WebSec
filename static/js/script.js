@@ -1,19 +1,76 @@
-let currentJobId = null;
-let pollInterval = null;
-let currentScanData = null; // Store for PDF generation
+let scanHistory = [];
+
+function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('open');
+}
+
+function showSection(sectionId) {
+    // Hide all sections
+    document.querySelectorAll('.content-section').forEach(el => el.classList.add('hidden'));
+
+    // Update Nav Active State
+    document.querySelectorAll('.nav-links li').forEach(el => el.classList.remove('active'));
+
+    const navItems = {
+        'new-scan': 'nav-dashboard',
+        'reports': 'nav-reports'
+    };
+
+    if (sectionId in navItems) {
+        if (sectionId === 'new-scan') {
+            document.getElementById('scan-view').classList.remove('hidden');
+        } else {
+            document.getElementById(sectionId + '-view').classList.remove('hidden');
+        }
+        document.getElementById(navItems[sectionId]).classList.add('active');
+
+        if (sectionId === 'reports') {
+            renderHistory();
+        }
+    } else {
+        // Fallback to dashboard
+        document.getElementById('scan-view').classList.remove('hidden');
+        document.getElementById('nav-dashboard').classList.add('active');
+    }
+
+    // Close sidebar on mobile after selection
+    if (window.innerWidth <= 992) {
+        document.getElementById('sidebar').classList.remove('open');
+    }
+}
+
+function logToTerminal(message, type = 'info') {
+    const term = document.getElementById('terminal-log');
+    if (!term) return;
+    const p = document.createElement('p');
+    p.classList.add('log-entry', `log-${type}`);
+    const time = new Date().toLocaleTimeString();
+    p.innerText = `[${time}] ${message}`;
+    term.appendChild(p);
+    term.scrollTop = term.scrollHeight;
+}
 
 async function startScan() {
-    const target = document.getElementById('target').value;
+    const urlInput = document.getElementById('target-url');
+    const target = urlInput.value.trim();
     if (!target) {
-        alert("Please enter a target URL");
+        logToTerminal("Error: No target specified", "error");
         return;
     }
 
-    // Reset UI
-    document.getElementById('results-area').style.display = 'none';
-    document.getElementById('progress-container').style.display = 'block';
-    document.getElementById('progress-fill').style.width = '0%';
-    document.getElementById('status-text').innerText = 'Initializing...';
+    resetButton(true);
+    logToTerminal(`Initiating sequence for: ${target}`, "info");
+
+    // Show Progress Bar
+    const progressContainer = document.getElementById('progress-container');
+    const progressBar = document.getElementById('scan-progress');
+    const progressText = document.getElementById('progress-text');
+
+    if (progressContainer) {
+        progressContainer.style.display = 'block';
+        progressBar.style.width = '0%';
+        progressText.innerText = '0%';
+    }
 
     try {
         const response = await fetch('/scan', {
@@ -23,112 +80,89 @@ async function startScan() {
         });
 
         const data = await response.json();
-
-        if (data.error) {
-            alert(data.error);
+        if (response.status !== 200 || data.error) {
+            logToTerminal(`Scan failed: ${data.error}`, "error");
+            resetButton(false);
+            if (progressContainer) progressContainer.style.display = 'none';
             return;
         }
 
-        currentJobId = data.job_id;
-        pollInterval = setInterval(checkStatus, 1000);
+        // Start Polling
+        const jobId = data.job_id;
+        pollStatus(jobId);
 
-    } catch (e) {
-        console.error(e);
-        alert("Failed to start scan");
+    } catch (error) {
+        logToTerminal(`Network Error: ${error}`, "error");
+        resetButton(false);
+        if (progressContainer) progressContainer.style.display = 'none';
     }
 }
 
-async function checkStatus() {
-    if (!currentJobId) return;
+async function pollStatus(jobId) {
+    const progressContainer = document.getElementById('progress-container');
+    const progressBar = document.getElementById('scan-progress');
+    const progressText = document.getElementById('progress-text');
 
     try {
-        const response = await fetch(`/scan_status/${currentJobId}`);
+        const response = await fetch(`/scan_status/${jobId}`);
         const data = await response.json();
 
-        // Update Progress
-        document.getElementById('progress-fill').style.width = `${data.progress}%`;
-        document.getElementById('status-text').innerText = data.message;
-
-        if (data.status === 'completed') {
-            clearInterval(pollInterval);
-            displayResults(data.result);
-        } else if (data.status === 'failed') {
-            clearInterval(pollInterval);
-            alert(`Scan Failed: ${data.error}`);
-            document.getElementById('status-text').innerText = 'Failed.';
+        if (data.error) {
+            logToTerminal(`Job Error: ${data.error}`, "error");
+            resetButton(false);
+            return;
         }
 
-    } catch (e) {
-        console.error(e);
+        // Update UI
+        if (progressBar) progressBar.style.width = `${data.progress}%`;
+        if (progressText) progressText.innerText = `${data.progress}%`;
+
+        // Log new messages if different from last one? (simplification: just log messages as they come)
+        // Ideally we track last logged message, but for now we just show status
+        if (data.message && document.getElementById('terminal-log').lastChild.innerText.indexOf(data.message) === -1) {
+            logToTerminal(data.message, "info");
+        }
+
+        if (data.status === 'completed') {
+            if (progressContainer) setTimeout(() => progressContainer.style.display = 'none', 1000);
+
+            logToTerminal("Sequence complete. Analysing gathered intel...", "success");
+
+            // Add to local history 
+            // Note: date might be slightly diff from server but ok for display
+            data.result.timestamp = new Date().toLocaleString();
+            scanHistory.unshift(data.result);
+
+            setTimeout(() => displayResults(data.result), 500);
+        } else if (data.status === 'failed') {
+            logToTerminal(`Scan failed: ${data.error}`, "error");
+            resetButton(false);
+            if (progressContainer) progressContainer.style.display = 'none';
+        } else {
+            // Continue polling
+            setTimeout(() => pollStatus(jobId), 1000);
+        }
+
+    } catch (error) {
+        logToTerminal(`Polling Error: ${error}`, "error");
+        resetButton(false);
     }
 }
 
-function displayResults(data) {
-    currentScanData = data;
-    const resultsArea = document.getElementById('results-area');
-    const vulnList = document.getElementById('vuln-list');
+let currentScanData = null;
 
-    // Summary
-    document.getElementById('risk-score').innerText = `${data.risk_score}/10`;
-    document.getElementById('target-ip').innerText = data.ip;
-    document.getElementById('vuln-count').innerText = data.vulnerabilities.length;
-
-    // Risk Color
-    const riskEl = document.getElementById('risk-score');
-    if (data.risk_score > 7) riskEl.style.color = '#ff3333'; // Critical
-    else if (data.risk_score > 4) riskEl.style.color = '#ffa500'; // Med
-    else riskEl.style.color = '#00ff6a'; // Low
-
-    // Vuln List
-    vulnList.innerHTML = '';
-    if (data.vulnerabilities.length === 0) {
-        vulnList.innerHTML = '<p class="glass-panel" style="padding: 20px; text-align: center;">No vulnerabilities found. Good job!</p>';
-    } else {
-        data.vulnerabilities.forEach(v => {
-            const card = document.createElement('div');
-            card.className = 'glass-panel';
-            card.style.padding = '20px';
-            card.style.marginBottom = '15px';
-            card.style.borderLeft = `4px solid ${getSeverityColor(v.severity)}`;
-            card.style.background = 'rgba(255,255,255,0.02)';
-
-            card.innerHTML = `
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                    <h4 style="margin: 0; color: #fff;">${v.name}</h4>
-                    <span style="background: ${getSeverityColor(v.severity)}20; color: ${getSeverityColor(v.severity)}; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">
-                        ${v.severity}
-                    </span>
-                </div>
-                <p style="margin: 0; color: var(--text-muted); font-size: 0.9rem;">${v.description}</p>
-            `;
-            vulnList.appendChild(card);
-        });
+async function exportPDF(data = null) {
+    const scanToExport = data || currentScanData;
+    if (!scanToExport) {
+        logToTerminal("No report data to export", "error");
+        return;
     }
-
-    resultsArea.style.display = 'block';
-
-    // Scroll to results
-    resultsArea.scrollIntoView({ behavior: 'smooth' });
-}
-
-function getSeverityColor(severity) {
-    switch (severity) {
-        case 'Critical': return '#ff3333';
-        case 'High': return '#ff6b6b';
-        case 'Medium': return '#ffa500';
-        case 'Low': return '#20c997';
-        default: return '#ccc';
-    }
-}
-
-async function downloadReport() {
-    if (!currentScanData) return;
 
     try {
         const response = await fetch('/export_pdf', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(currentScanData)
+            body: JSON.stringify(scanToExport)
         });
 
         if (response.ok) {
@@ -136,15 +170,109 @@ async function downloadReport() {
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `web_scan_report_${Date.now()}.pdf`;
+            a.download = `webscrub_${scanToExport.target.replace(/[^a-z0-9]/gi, '_')}.pdf`;
             document.body.appendChild(a);
             a.click();
             a.remove();
         } else {
-            alert("Failed to generate PDF");
+            logToTerminal("Failed to generate PDF", "error");
         }
-    } catch (e) {
-        console.error(e);
-        alert("Error downloading report");
+    } catch (error) {
+        logToTerminal("Error exporting PDF: " + error, "error");
     }
+}
+
+function displayResults(data) {
+    currentScanData = data;
+    document.getElementById('scan-view').classList.add('hidden');
+    document.getElementById('results-view').classList.remove('hidden');
+    resetButton(false);
+
+    document.getElementById('res-target').innerText = data.target;
+    document.getElementById('res-score').innerText = data.risk_score;
+    document.getElementById('res-ip').innerText = data.ip;
+
+    const vulnList = document.getElementById('vuln-list');
+    vulnList.innerHTML = '';
+
+    if (data.vulnerabilities.length === 0) {
+        vulnList.innerHTML = '<li class="vuln-item" style="border-color: var(--accent);">No core vulnerabilities detected.</li>';
+    } else {
+        data.vulnerabilities.forEach(v => {
+            const li = document.createElement('li');
+            li.className = `vuln-item severity-${v.severity}`;
+            li.innerHTML = `<strong>[${v.severity}] ${v.name}</strong><br><small>${v.description}</small>`;
+            vulnList.appendChild(li);
+        });
+    }
+
+    document.getElementById('res-scapy').innerText = "SSL/TLS Info:\n" + JSON.stringify(data.ssl_info, null, 2) +
+        "\n\nDNS Records:\n" + JSON.stringify(data.dns_info, null, 2);
+    document.getElementById('res-nmap').innerText = "Response Headers:\n" + JSON.stringify(data.raw_headers, null, 2);
+}
+
+function renderHistory() {
+    const container = document.getElementById('history-list');
+    if (!container) return;
+
+    if (scanHistory.length === 0) {
+        container.innerHTML = '<p class="empty-msg">No previous scan history found.</p>';
+        return;
+    }
+
+    container.innerHTML = '';
+    scanHistory.forEach((scan, index) => {
+        const item = document.createElement('div');
+        item.className = 'history-item';
+
+        const content = document.createElement('div');
+        content.style.flex = "1";
+        content.onclick = () => viewHistoryItem(index);
+        content.innerHTML = `
+            <div class="hist-target">${scan.target}</div>
+            <small style="color: var(--text-muted)">${scan.timestamp}</small>
+        `;
+
+        const meta = document.createElement('div');
+        meta.style.display = "flex";
+        meta.style.alignItems = "center";
+        meta.style.gap = "15px";
+
+        const score = document.createElement('div');
+        score.className = 'hist-score';
+        score.innerText = `${scan.risk_score}/10`;
+
+        const downloadBtn = document.createElement('button');
+        downloadBtn.className = 'btn-icon';
+        downloadBtn.title = 'Download Report';
+        downloadBtn.innerHTML = '<i class="fas fa-file-pdf"></i>';
+        downloadBtn.onclick = (e) => {
+            e.stopPropagation();
+            exportPDF(scan);
+        };
+
+        meta.appendChild(score);
+        meta.appendChild(downloadBtn);
+
+        item.appendChild(content);
+        item.appendChild(meta);
+        container.appendChild(item);
+    });
+}
+
+function viewHistoryItem(index) {
+    displayResults(scanHistory[index]);
+}
+
+function resetButton(loading) {
+    const btn = document.getElementById('scan-btn');
+    if (!btn) return;
+    btn.disabled = loading;
+    btn.innerHTML = loading ? 'SCANNING... <i class="fas fa-spinner fa-spin"></i>' : 'INITIATE SCAN <i class="fas fa-bolt"></i>';
+}
+
+function resetView() {
+    document.getElementById('results-view').classList.add('hidden');
+    document.getElementById('scan-view').classList.remove('hidden');
+    logToTerminal("System ready.", "info");
 }

@@ -1,42 +1,56 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebScrub | History</title>
+    <title>Scan History | Web Security Scanner</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
-<body>
-    <div class="container">
-        <header class="glass-panel" style="padding: 20px; margin-top: 20px;">
-            <div class="logo">
-                <h1>WebScrub <span style="font-size: 0.5em; color: var(--primary-color);">ADMIN</span></h1>
-            </div>
-            <nav>
-                <ul>
-                    <li><a href="{{ url_for('index') }}">Scanner</a></li>
-                    <li><a href="{{ url_for('history') }}" class="active">History</a></li>
-                    <li><a href="{{ url_for('logout') }}">Logout</a></li>
-                </ul>
-            </nav>
-        </header>
 
-        <main>
-            <div class="glass-panel" style="padding: 30px;">
-                <h2 style="margin-top: 0;">Scan History</h2>
-                
-                <div class="history-list">
+<body>
+    <div class="app-container">
+        <nav class="sidebar">
+            <div class="logo">
+                <i class="fas fa-shield-alt"></i> Web Security Scanner
+            </div>
+            <ul class="nav-links">
+                <li><a href="{{ url_for('index') }}"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
+                <li class="active"><a href="#"><i class="fas fa-history"></i> History</a></li>
+                <li><a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
+            </ul>
+        </nav>
+
+        <main class="main-content">
+            <header>
+                <h2>Scan History</h2>
+                <div class="status-indicator">
+                    User: <span class="status-online">{{ current_user.username }} ({{ current_user.role|upper }})</span>
+                </div>
+            </header>
+
+            <div class="content-section">
+                <div class="history-container">
                     {% if scans %}
                     {% for scan in scans %}
-                    <div class="history-item glass-panel" style="background: rgba(255,255,255,0.02);">
+                    <div class="history-item">
                         <div class="hist-info">
-                            <h3>{{ scan.target }} <span class="risk-badge risk-{{ 'High' if scan.risk_score > 7 else 'Medium' if scan.risk_score > 4 else 'Low' }}">{{ scan.risk_score }}/10</span></h3>
-                            <div class="hist-meta">
-                                <span><i class="fas fa-clock"></i> {{ scan.timestamp.strftime('%Y-%m-%d %H:%M') }}</span>
-                                <span style="margin-left: 15px;"><i class="fas fa-network-wired"></i> {{ scan.ip_address }}</span>
-                                <span style="margin-left: 15px;"><i class="fas fa-user-shield"></i> {{ scan.user.username }}</span>
+                            <div class="hist-target">{{ scan.target }}</div>
+                            <div style="color: var(--text-muted); font-size: 0.9rem;">
+                                {{ scan.timestamp.strftime('%Y-%m-%d %H:%M') }}
+                                {% if current_user.role == 'admin' %}
+                                <span style="margin-left: 10px; color: var(--accent);">
+                                    <i class="fas fa-user-circle"></i> {{ scan.user.username }}
+                                </span>
+                                {% endif %}
                             </div>
+                        </div>
+                        <div class="hist-score">
+                            Risk Score: <strong>{{ scan.risk_score }}</strong>
                         </div>
                         <div class="hist-actions">
                             <button onclick="viewScan({{ scan.id }})" class="btn-icon" title="View Details">
@@ -45,99 +59,111 @@
                             <button onclick="downloadPDF({{ scan.id }})" class="btn-icon" title="Download PDF">
                                 <i class="fas fa-file-pdf"></i>
                             </button>
-                            <button onclick="deleteScan({{ scan.id }})" class="btn-icon" title="Delete Scan" style="color: var(--danger); border-color: rgba(255, 51, 51, 0.3);">
+                            <button onclick="deleteScan({{ scan.id }})" class="btn-icon" title="Delete Scan"
+                                style="color: var(--danger); border-color: rgba(255, 51, 51, 0.3);">
                                 <i class="fas fa-trash-alt"></i>
                             </button>
                         </div>
                     </div>
                     {% endfor %}
                     {% else %}
-                    <p class="empty-msg" style="text-align: center; color: var(--text-muted);">No scan history available.</p>
+                    <p class="empty-msg">No scans performed yet.</p>
                     {% endif %}
                 </div>
             </div>
 
-            <!-- Detail Modal -->
-            <div id="detailModal" class="modal">
-                <div class="modal-content glass-panel">
-                    <span class="close-btn" onclick="closeModal()">&times;</span>
-                    <h2 id="modalTitle">Scan Details</h2>
-                    <div id="modalBody">
-                        <!-- Content loaded dynamically -->
+            <!-- Detailed Scan View Modal/Section (Hidden by default) -->
+            <div id="scan-detail-view" class="content-section hidden">
+                <div class="results-header">
+                    <h2>Scan Details: <span id="detail-target" class="accent-text"></span></h2>
+                    <div class="report-actions">
+                        <button class="btn-secondary" onclick="exportCurrentDetailPDF()">
+                            <i class="fas fa-file-pdf"></i> Download PDF
+                        </button>
+                        <button class="btn-secondary" onclick="closeDetailView()">
+                            <i class="fas fa-arrow-left"></i> Back to History
+                        </button>
                     </div>
-                    <div style="margin-top: 20px; text-align: right;">
-                        <button onclick="exportCurrentDetailPDF()" class="btn-primary">Download Report</button>
+                </div>
+                <div class="risk-badge-container">
+                    Risk Score: <span id="detail-score">0.0</span>/10
+                </div>
+
+                <div class="results-grid">
+                    <div class="card val-list">
+                        <h3>Vulnerabilities Detected</h3>
+                        <ul id="detail-vuln-list" class="vuln-items"></ul>
+                    </div>
+                    <div class="card details-panel">
+                        <h3>System Info</h3>
+                        <p><strong>IP:</strong> <span id="detail-ip"></span></p>
+                        <p><strong>User:</strong> <span id="detail-user"></span></p>
+                        <p><strong>Date:</strong> <span id="detail-date"></span></p>
                     </div>
                 </div>
             </div>
 
             <script>
+                // Simple inline script for history view logic
                 let currentDetailId = null;
 
-                async function viewScan(id) {
-                    const modal = document.getElementById('detailModal');
-                    const body = document.getElementById('modalBody');
-                    const title = document.getElementById('modalTitle');
-                    
-                    body.innerHTML = '<p>Loading details...</p>';
-                    modal.classList.add('active');
-                    currentDetailId = id;
-
+                async function viewScan(scanId) {
                     try {
-                        const response = await fetch(`/scan_details/${id}`);
+                        const response = await fetch(`/scan_details/${scanId}`);
                         const data = await response.json();
-                        
-                        if (data.error) throw new Error(data.error);
-                        
-                        title.innerText = `Report: ${data.target}`;
-                        
-                        let vulnsHtml = '';
-                        let vulns = [];
-                        try {
-                            vulns = typeof data.vulnerabilities === 'string' ? JSON.parse(data.vulnerabilities) : data.vulnerabilities;
-                        } catch(e) { vulns = [] }
 
-                        if (vulns.length === 0) {
-                            vulnsHtml = '<p>No vulnerabilities found.</p>';
-                        } else {
-                            vulnsHtml = '<ul style="list-style: none; padding: 0;">';
-                            vulns.forEach(v => {
-                                vulnsHtml += `
-                                <li style="background: rgba(255,255,255,0.05); padding: 15px; margin-bottom: 10px; border-radius: 8px; border-left: 4px solid var(--danger);">
-                                    <div style="display: flex; justify-content: space-between;">
-                                        <strong>${v.name || 'Unknown Issue'}</strong>
-                                        <span class="risk-badge risk-${v.severity}">${v.severity}</span>
-                                    </div>
-                                    <p style="margin: 5px 0 0 0; color: #ccc; font-size: 0.9em;">${v.description || ''}</p>
-                                </li>`;
-                            });
-                            vulnsHtml += '</ul>';
+                        if (data.error) {
+                            alert(data.error);
+                            return;
                         }
-                        
-                        body.innerHTML = `
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
-                                <div>
-                                    <p><strong>Date:</strong> ${data.timestamp}</p>
-                                    <p><strong>IP:</strong> ${data.ip_address}</p>
-                                </div>
-                                <div style="text-align: right;">
-                                    <p><strong>Risk Score:</strong> <span style="font-size: 1.2em; color: var(--primary-color);">${data.risk_score}/10</span></p>
-                                </div>
-                            </div>
-                            <h3>Findings</h3>
-                            ${vulnsHtml}
-                        `;
+
+                        currentDetailId = scanId;
+
+                        // Populate Detail View
+                        document.getElementById('detail-target').innerText = data.target;
+                        document.getElementById('detail-score').innerText = data.risk_score;
+                        document.getElementById('detail-ip').innerText = data.ip_address;
+                        document.getElementById('detail-user').innerText = data.username || 'Unknown';
+                        document.getElementById('detail-date').innerText = data.timestamp;
+
+                        const list = document.getElementById('detail-vuln-list');
+                        list.innerHTML = '';
+
+                        const vulns = JSON.parse(data.vulnerabilities || '[]');
+                        if (vulns.length === 0) {
+                            list.innerHTML = '<li class="vuln-item">No vulnerabilities found.</li>';
+                        } else {
+                            vulns.forEach(v => {
+                                const li = document.createElement('li');
+                                li.className = `vuln-item severity-${v.severity}`;
+                                li.innerHTML = `<strong>[${v.severity}] ${v.name}</strong><br><small>${v.description}</small>`;
+                                list.appendChild(li);
+                            });
+                        }
+
+                        // Show Detail View
+                        document.querySelector('.history-container').style.display = 'none';
+                        document.querySelector('header').style.display = 'none'; // Hide main header to avoid clutter
+                        document.getElementById('scan-detail-view').classList.remove('hidden');
+
                     } catch (e) {
-                        body.innerHTML = `<p style="color: var(--danger);">Error loading details: ${e.message}</p>`;
+                        console.error(e);
+                        alert("Failed to load scan details");
                     }
                 }
 
-                function closeModal() {
-                    document.getElementById('detailModal').classList.remove('active');
+                function closeDetailView() {
+                    document.getElementById('scan-detail-view').classList.add('hidden');
+                    document.querySelector('.history-container').style.display = 'block';
+                    document.querySelector('header').style.display = 'flex';
                 }
-                
-                function downloadPDF(id) {
-                    window.location.href = `/download_scan_pdf/${id}`;
+
+                function downloadPDF(scanId) {
+                    // We need to fetch details first then define how export_pdf works with ID or payload
+                    // Since export_pdf expects JSON payload, we should probably fetch first or update export_pdf to accept ID
+                    // Updating export_pdf to accept ID is cleaner but let's stick to consistent JSON payload for now
+                    // actually, let's just make a new endpoint for downloading by ID
+                    window.location.href = `/download_scan_pdf/${scanId}`;
                 }
 
                 function exportCurrentDetailPDF() {
@@ -156,9 +182,9 @@
                                 'Content-Type': 'application/json'
                             }
                         });
-                        
+
                         const data = await response.json();
-                        
+
                         if (response.ok) {
                             // Reload page to reflect changes
                             window.location.reload();
@@ -174,4 +200,5 @@
         </main>
     </div>
 </body>
+
 </html>
