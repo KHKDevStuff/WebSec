@@ -12,8 +12,7 @@ function showSection(sectionId) {
     document.querySelectorAll('.nav-links li').forEach(el => el.classList.remove('active'));
 
     const navItems = {
-        'new-scan': 'nav-dashboard',
-        'reports': 'nav-reports'
+        'new-scan': 'nav-dashboard'
     };
 
     if (sectionId in navItems) {
@@ -23,10 +22,6 @@ function showSection(sectionId) {
             document.getElementById(sectionId + '-view').classList.remove('hidden');
         }
         document.getElementById(navItems[sectionId]).classList.add('active');
-
-        if (sectionId === 'reports') {
-            renderHistory();
-        }
     } else {
         // Fallback to dashboard
         document.getElementById('scan-view').classList.remove('hidden');
@@ -226,36 +221,43 @@ function renderHistory() {
         item.className = 'history-item';
 
         const content = document.createElement('div');
-        content.style.flex = "1";
-        content.onclick = () => viewHistoryItem(index);
+        content.className = 'hist-info';
         content.innerHTML = `
             <div class="hist-target">${scan.target}</div>
             <small style="color: var(--text-muted)">${scan.timestamp}</small>
         `;
 
-        const meta = document.createElement('div');
-        meta.style.display = "flex";
-        meta.style.alignItems = "center";
-        meta.style.gap = "15px";
-
         const score = document.createElement('div');
         score.className = 'hist-score';
-        score.innerText = `${scan.risk_score}/10`;
+        score.innerHTML = `Risk Score: <strong>${scan.risk_score}</strong>`;
+
+        const actions = document.createElement('div');
+        actions.className = 'hist-actions';
+
+        const viewBtn = document.createElement('button');
+        viewBtn.className = 'btn-icon';
+        viewBtn.title = 'View Details';
+        viewBtn.innerHTML = '<i class="fas fa-eye"></i>';
+        viewBtn.onclick = (e) => {
+            e.stopPropagation();
+            viewHistoryItem(index);
+        };
 
         const downloadBtn = document.createElement('button');
         downloadBtn.className = 'btn-icon';
-        downloadBtn.title = 'Download Report';
+        downloadBtn.title = 'Download PDF';
         downloadBtn.innerHTML = '<i class="fas fa-file-pdf"></i>';
         downloadBtn.onclick = (e) => {
             e.stopPropagation();
             exportPDF(scan);
         };
 
-        meta.appendChild(score);
-        meta.appendChild(downloadBtn);
+        actions.appendChild(viewBtn);
+        actions.appendChild(downloadBtn);
 
         item.appendChild(content);
-        item.appendChild(meta);
+        item.appendChild(score);
+        item.appendChild(actions);
         container.appendChild(item);
     });
 }

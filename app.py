@@ -29,7 +29,7 @@ if db_url:
     elif db_url.startswith("postgresql://"):
         db_url = db_url.replace("postgresql://", "postgresql+pg8000://", 1)
 
-app.config['SQLALCHEMY_DATABASE_URI'] = db_url or 'sqlite:///:memory:'
+app.config['SQLALCHEMY_DATABASE_URI'] = db_url or 'sqlite:///local_database.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)
